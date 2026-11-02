@@ -34,7 +34,7 @@ The CSVs are in `dataset/`. The images are not committed (about 55 MB): unpack t
 
 ```bash
 python -m insureit.cli dataset/claims.csv output.csv        # predictions for the test set
-python -m insureit.cli dataset/claims.csv output.csv --provider gemini   # same, with Gemini (default gemini-2.5-flash)
+python -m insureit.cli dataset/claims.csv output.csv --provider gemini   # same, with Gemini (default gemini-3.5-flash)
 python -m evaluation.evaluate                                # run + score on dataset/sample_claims.csv
 python -m evaluation.evaluate --pred some_predictions.csv    # score an existing file
 python -m pytest tests                                       # offline tests

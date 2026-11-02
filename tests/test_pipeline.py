@@ -99,7 +99,7 @@ def test_failed_call_becomes_manual_review_row(tmp_path):
 def test_gemini_request_shape():
     from insureit import prompts
     from insureit.backends import GeminiBackend
-    body = GeminiBackend("gemini-2.5-flash", api_key="x").request_body(
+    body = GeminiBackend("gemini-3.5-flash", api_key="x").request_body(
         "sys", "text", [("img_1", "QUJD")], prompts.tool_schema("car"))
     parts = body["contents"][0]["parts"]
     assert parts[1] == {"text": "Image img_1:"} and parts[2]["inline_data"]["data"] == "QUJD"

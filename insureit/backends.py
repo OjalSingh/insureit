@@ -9,11 +9,36 @@ import anthropic
 
 
 class Retryable(Exception):
-    pass
+    """A failure worth retrying. `retry_after` is the server's suggested wait in seconds, if any."""
+
+    def __init__(self, msg, retry_after: float | None = None):
+        super().__init__(msg)
+        self.retry_after = retry_after
+
+
+class QuotaExhausted(RuntimeError):
+    """The provider's daily quota is used up. Not retried; the batch should stop calling."""
+
+
+def _gemini_retry_delay(body: bytes) -> float | None:
+    """Reads google.rpc.RetryInfo ("retryDelay": "17s") from a Gemini error body."""
+    try:
+        details = json.loads(body).get("error", {}).get("details", [])
+    except ValueError:
+        return None
+    for d in details:
+        delay = d.get("retryDelay")
+        if isinstance(delay, str) and delay.endswith("s"):
+            try:
+                return float(delay[:-1])
+            except ValueError:
+                pass
+    return None
 
 
 class ClaudeBackend:
     default_model = "claude-sonnet-5-5"
+    default_rpm = 40
 
     def __init__(self, model: str, client=None):
         self.model = model
@@ -38,7 +63,8 @@ class ClaudeBackend:
 
 
 class GeminiBackend:
-    default_model = "gemini-2.5-flash"
+    default_model = "gemini-3.5-flash"
+    default_rpm = 10  # the free tier allows roughly 10 requests per minute for Flash models
     url = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     def __init__(self, model: str, api_key: str | None = None):
@@ -71,9 +97,14 @@ class GeminiBackend:
             with urllib.request.urlopen(req, timeout=120) as r:
                 body = json.load(r)
         except urllib.error.HTTPError as e:
+            err = e.read()
             if e.code in (429, 500, 502, 503, 504):
-                raise Retryable(f"HTTP {e.code}") from e
-            raise RuntimeError(f"Gemini HTTP {e.code}: {e.read()[:200].decode(errors='replace')}") from e
+                delay = _gemini_retry_delay(err)
+                if delay and delay > 600:  # a daily quota, not a per-minute one: retrying is futile
+                    raise QuotaExhausted(f"Gemini quota exhausted for {self.model}; "
+                                         f"resets in about {delay / 3600:.0f} h") from e
+                raise Retryable(f"HTTP {e.code}", delay) from e
+            raise RuntimeError(f"Gemini HTTP {e.code}: {err[:200].decode(errors='replace')}") from e
         except (urllib.error.URLError, TimeoutError) as e:
             raise Retryable(str(e)) from e
         candidate = (body.get("candidates") or [{}])[0]

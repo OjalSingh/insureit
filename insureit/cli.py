@@ -10,7 +10,7 @@ from .data import load_claims, load_history, load_requirements
 from .schema import OUTPUT_COLUMNS
 
 
-def run(claims_csv, output_csv, dataset, provider="claude", model=None, workers=4, rpm=40,
+def run(claims_csv, output_csv, dataset, provider="claude", model=None, workers=4, rpm=None,
         cache_dir=".cache", limit=None, reviewer=None):
     dataset = Path(dataset)
     claims = load_claims(claims_csv)[:limit]
@@ -35,7 +35,7 @@ def main():
     p.add_argument("--provider", choices=["claude", "gemini"], default="claude")
     p.add_argument("--model", help="defaults to the provider's default model")
     p.add_argument("--workers", type=int, default=4)
-    p.add_argument("--rpm", type=int, default=40)
+    p.add_argument("--rpm", type=int, help="requests per minute (default: 40 for claude, 10 for gemini)")
     p.add_argument("--limit", type=int)
     a = p.parse_args()
     _, usage = run(a.claims_csv, a.output_csv, a.dataset, a.provider, a.model, a.workers, a.rpm,

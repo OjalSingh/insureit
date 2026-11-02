@@ -7,7 +7,7 @@ from pathlib import Path
 
 from . import prompts
 from .data import Claim, requirements_for
-from .backends import Retryable, make_backend
+from .backends import QuotaExhausted, Retryable, make_backend
 from .images import load_image
 from .postprocess import build_row, fallback_review
 
@@ -32,7 +32,7 @@ class RateLimiter:
 class ClaimReviewer:
     def __init__(self, history: dict, requirements: list[dict], root: Path,
                  provider: str = "claude", model: str | None = None,
-                 cache_dir: Path | None = Path(".cache"), rpm: int = 40, max_attempts: int = 5,
+                 cache_dir: Path | None = Path(".cache"), rpm: int | None = None, max_attempts: int = 8,
                  backend=None):
         self.history = history
         self.requirements = requirements
@@ -40,11 +40,12 @@ class ClaimReviewer:
         self.backend = backend or make_backend(provider, model)
         self.model = f"{provider}:{self.backend.model}"
         self.cache_dir = Path(cache_dir) if cache_dir else None
-        self.limiter = RateLimiter(rpm)
+        self.limiter = RateLimiter(rpm or getattr(self.backend, "default_rpm", 40))
         self.max_attempts = max_attempts
         self.usage = {"calls": 0, "cache_hits": 0, "images": 0,
                       "input_tokens": 0, "output_tokens": 0, "seconds": 0.0}
         self._lock = threading.Lock()
+        self.quota_error: QuotaExhausted | None = None
 
     def _cache_path(self, claim: Claim, image_hashes: list[str]) -> Path | None:
         if not self.cache_dir:
@@ -60,15 +61,20 @@ class ClaimReviewer:
         tool = prompts.tool_schema(claim.claim_object)
         labelled = list(zip(claim.image_ids, images))
         for attempt in range(1, self.max_attempts + 1):
+            if self.quota_error:  # stop spending calls once the daily quota is gone
+                raise self.quota_error
             self.limiter.wait()
             try:
                 start = time.monotonic()
                 review, tokens_in, tokens_out = self.backend.generate(
                     prompts.SYSTEM, text, labelled, tool)
-            except Retryable:
+            except QuotaExhausted as e:
+                self.quota_error = e
+                raise
+            except Retryable as e:
                 if attempt == self.max_attempts:
                     raise
-                time.sleep(min(60, 2 ** attempt))
+                time.sleep(min(90, e.retry_after or 2 ** attempt))
                 continue
             with self._lock:
                 self.usage["calls"] += 1
