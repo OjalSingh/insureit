@@ -5,14 +5,11 @@ import threading
 import time
 from pathlib import Path
 
-import anthropic
-
 from . import prompts
 from .data import Claim, requirements_for
+from .backends import Retryable, make_backend
 from .images import load_image
 from .postprocess import build_row, fallback_review
-
-DEFAULT_MODEL = "claude-sonnet-5-5"
 
 
 class RateLimiter:
@@ -34,16 +31,17 @@ class RateLimiter:
 
 class ClaimReviewer:
     def __init__(self, history: dict, requirements: list[dict], root: Path,
-                 model: str = DEFAULT_MODEL, cache_dir: Path | None = Path(".cache"),
-                 rpm: int = 40, max_attempts: int = 5, client=None):
+                 provider: str = "claude", model: str | None = None,
+                 cache_dir: Path | None = Path(".cache"), rpm: int = 40, max_attempts: int = 5,
+                 backend=None):
         self.history = history
         self.requirements = requirements
         self.root = Path(root)
-        self.model = model
+        self.backend = backend or make_backend(provider, model)
+        self.model = f"{provider}:{self.backend.model}"
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.limiter = RateLimiter(rpm)
         self.max_attempts = max_attempts
-        self.client = client or anthropic.Anthropic(max_retries=0)
         self.usage = {"calls": 0, "cache_hits": 0, "images": 0,
                       "input_tokens": 0, "output_tokens": 0, "seconds": 0.0}
         self._lock = threading.Lock()
@@ -57,33 +55,27 @@ class ClaimReviewer:
         return self.cache_dir / (hashlib.sha256(key.encode()).hexdigest() + ".json")
 
     def _request(self, claim: Claim, images: list[str]) -> dict:
-        content = [{"type": "text", "text": prompts.user_text(
-            claim, self.history.get(claim.user_id),
-            requirements_for(self.requirements, claim.claim_object))}]
-        for image_id, data in zip(claim.image_ids, images):
-            content.append({"type": "text", "text": f"Image {image_id}:"})
-            content.append({"type": "image",
-                            "source": {"type": "base64", "media_type": "image/jpeg", "data": data}})
+        text = prompts.user_text(claim, self.history.get(claim.user_id),
+                                 requirements_for(self.requirements, claim.claim_object))
         tool = prompts.tool_schema(claim.claim_object)
+        labelled = list(zip(claim.image_ids, images))
         for attempt in range(1, self.max_attempts + 1):
             self.limiter.wait()
             try:
                 start = time.monotonic()
-                resp = self.client.messages.create(
-                    model=self.model, max_tokens=2000, temperature=0, system=prompts.SYSTEM,
-                    tools=[tool], tool_choice={"type": "tool", "name": tool["name"]},
-                    messages=[{"role": "user", "content": content}])
-                with self._lock:
-                    self.usage["calls"] += 1
-                    self.usage["input_tokens"] += resp.usage.input_tokens
-                    self.usage["output_tokens"] += resp.usage.output_tokens
-                    self.usage["seconds"] += time.monotonic() - start
-                return next(b.input for b in resp.content if b.type == "tool_use")
-            except (anthropic.RateLimitError, anthropic.APIConnectionError,
-                    anthropic.InternalServerError) as e:
+                review, tokens_in, tokens_out = self.backend.generate(
+                    prompts.SYSTEM, text, labelled, tool)
+            except Retryable:
                 if attempt == self.max_attempts:
                     raise
                 time.sleep(min(60, 2 ** attempt))
+                continue
+            with self._lock:
+                self.usage["calls"] += 1
+                self.usage["input_tokens"] += tokens_in
+                self.usage["output_tokens"] += tokens_out
+                self.usage["seconds"] += time.monotonic() - start
+            return review
         raise RuntimeError("unreachable")
 
     def review(self, claim: Claim) -> dict:

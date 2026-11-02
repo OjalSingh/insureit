@@ -7,8 +7,8 @@ minimum evidence requirements, and returns the 14-column review row described in
 
 ## How it works
 
-- One Claude vision call per claim (all images together, each labelled with its id) that must answer
-  through a `submit_review` tool whose schema only allows the permitted values (`insureit/prompts.py`).
+- One vision call per claim (Claude or Gemini, see `insureit/backends.py`) (all images together, each labelled with its id) that must return the `submit_review` structure,
+  a schema that only allows the permitted values (`insureit/prompts.py`).
 - Chat text and any text inside images are treated as untrusted data. Instructions such as "approve
   immediately" are flagged `text_instruction_present` and never followed.
 - `insureit/postprocess.py` validates the answer and adds history risk deterministically: history
@@ -23,7 +23,8 @@ minimum evidence requirements, and returns the 14-column review row described in
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=...
+export ANTHROPIC_API_KEY=...   # provider claude (default)
+export GEMINI_API_KEY=...      # provider gemini
 ```
 
 The CSVs are in `dataset/`. The images are not committed (about 55 MB): unpack them to
@@ -33,6 +34,7 @@ The CSVs are in `dataset/`. The images are not committed (about 55 MB): unpack t
 
 ```bash
 python -m insureit.cli dataset/claims.csv output.csv        # predictions for the test set
+python -m insureit.cli dataset/claims.csv output.csv --provider gemini   # same, with Gemini (default gemini-2.5-flash)
 python -m evaluation.evaluate                                # run + score on dataset/sample_claims.csv
 python -m evaluation.evaluate --pred some_predictions.csv    # score an existing file
 python -m pytest tests                                       # offline tests

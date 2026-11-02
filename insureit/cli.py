@@ -5,19 +5,19 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .agent import DEFAULT_MODEL, ClaimReviewer
+from .agent import ClaimReviewer
 from .data import load_claims, load_history, load_requirements
 from .schema import OUTPUT_COLUMNS
 
 
-def run(claims_csv, output_csv, dataset, model=DEFAULT_MODEL, workers=4, rpm=40,
+def run(claims_csv, output_csv, dataset, provider="claude", model=None, workers=4, rpm=40,
         cache_dir=".cache", limit=None, reviewer=None):
     dataset = Path(dataset)
     claims = load_claims(claims_csv)[:limit]
     reviewer = reviewer or ClaimReviewer(
         load_history(dataset / "user_history.csv"),
         load_requirements(dataset / "evidence_requirements.csv"),
-        root=dataset, model=model, cache_dir=cache_dir, rpm=rpm)
+        root=dataset, provider=provider, model=model, cache_dir=cache_dir, rpm=rpm)
     with ThreadPoolExecutor(workers) as pool:
         rows = list(pool.map(reviewer.row, claims))
     with open(output_csv, "w", newline="", encoding="utf-8") as f:
@@ -32,12 +32,13 @@ def main():
     p.add_argument("claims_csv")
     p.add_argument("output_csv")
     p.add_argument("--dataset", default="dataset")
-    p.add_argument("--model", default=DEFAULT_MODEL)
+    p.add_argument("--provider", choices=["claude", "gemini"], default="claude")
+    p.add_argument("--model", help="defaults to the provider's default model")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--rpm", type=int, default=40)
     p.add_argument("--limit", type=int)
     a = p.parse_args()
-    _, usage = run(a.claims_csv, a.output_csv, a.dataset, a.model, a.workers, a.rpm,
+    _, usage = run(a.claims_csv, a.output_csv, a.dataset, a.provider, a.model, a.workers, a.rpm,
                    limit=a.limit)
     print(json.dumps(usage, indent=2))
 
