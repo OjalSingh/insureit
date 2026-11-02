@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.cache/
+.env
+dataset/images
+output.csv
+evaluation/results/
+code.zip
+runs/
