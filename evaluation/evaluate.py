@@ -52,10 +52,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pred", help="existing prediction CSV (skips running the agent)")
     ap.add_argument("--dataset", default=str(ROOT / "dataset"))
-    ap.add_argument("--provider", choices=["claude", "gemini"], default="claude")
-    ap.add_argument("--model")
-    ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--rpm", type=int)
+    cli.add_run_args(ap)
     ap.add_argument("--out", default=str(ROOT / "evaluation" / "results"))
     a = ap.parse_args()
 
@@ -67,7 +64,8 @@ def main():
     if not pred_path:
         pred_path = out / "sample_predictions.csv"
         _, usage = cli.run(gold_path, pred_path, a.dataset, a.provider, a.model,
-                            workers=a.workers, rpm=a.rpm)
+                           workers=a.workers, rpm=a.rpm, cascade=a.cascade, batch=a.batch,
+                           effort=a.effort, cache_dir=None if a.no_cache else ".cache")
     report = score(read_csv(gold_path), read_csv(pred_path))
     report["usage"] = usage
     (out / "sample_metrics.json").write_text(json.dumps(report, indent=2))
