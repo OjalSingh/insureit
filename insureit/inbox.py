@@ -229,7 +229,7 @@ def create_app(predictions: Path, dataset: Path, db_path: Path | None = None) ->
             + html.escape(d["note"] if d else "") + "</textarea><p>"
             "<button name='action' value='approve' class='secondary'>Approve model decision</button> "
             "<button name='action' value='override'>Save my changes</button></p></form>")
-        nav = (f"<p><a href='/'>← Inbox</a>"
+        nav = ("<p><a href='/'>← Inbox</a>"
                + (f" · <a href='/claims/{i + 1}'>Next claim →</a>" if i + 1 < len(rows) else "")
                + "</p>")
         body = (
