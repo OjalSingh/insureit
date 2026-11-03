@@ -52,6 +52,25 @@ Evaluation reports exact-match accuracy for `evidence_standard_met`, `issue_type
 `claim_status`, `valid_image` and `severity`, F1 and exact-match for the set columns `risk_flags` and
 `supporting_image_ids`, a `claim_status` confusion table, and the list of rows that differ.
 
+## Reviewer inbox
+
+A web queue for the human adjuster who signs off on the model's reviews:
+
+```bash
+python -m insureit.cli dataset/claims.csv output.csv
+python -m insureit.inbox output.csv --dataset dataset     # open http://127.0.0.1:8000
+```
+
+- Claims that need a person come first: manual review, risk flags, then anything not `supported`.
+- Each claim page shows the chat, every image, the model's decision with its justification, flags
+  and cited images, and a form to approve it or override any field.
+- For claims without enough evidence it drafts a message that asks the customer for the specific
+  photo that is missing (sharper, straight on, a wide shot to match the vehicle, and so on).
+- Decisions are stored in SQLite next to the predictions (`output.inbox.db`). `/export.csv`
+  downloads the reviewed rows in the labelled 14-column format, so overrides become new eval
+  examples (`python -m evaluation.evaluate --pred ...` against them), and `/api/stats` counts the
+  overrides by field, which shows where the model is weakest.
+- All customer text is HTML-escaped, and only image files listed in the predictions are served.
 ## CI and the eval gate
 
 - **CI** (`.github/workflows/ci.yml`) runs the offline tests on every push and pull request.
