@@ -43,3 +43,19 @@ python -m pytest tests                                       # offline tests
 Evaluation reports exact-match accuracy for `evidence_standard_met`, `issue_type`, `object_part`,
 `claim_status`, `valid_image` and `severity`, F1 and exact-match for the set columns `risk_flags` and
 `supporting_image_ids`, a `claim_status` confusion table, and the list of rows that differ.
+
+## CI and the eval gate
+
+- **CI** (`.github/workflows/ci.yml`) runs the offline tests on every push and pull request.
+- **Eval** (`.github/workflows/eval.yml`) runs `evaluation.evaluate` on the labelled samples with the
+  real model, compares it with `evaluation/baseline.json` using `evaluation/gate.py`, and posts the
+  score table on the PR. It fails when `claim_status` accuracy drops by more than the tolerance
+  (default 5 points, one claim of 20). It spends API credits, so it runs only when a PR has the
+  `run-eval` label or when started by hand. Reviews are cached between runs, so re-running with
+  unchanged prompts is free. The one-time setup (API key secret, image archive on a release,
+  first baseline) is at the top of the workflow file.
+
+```bash
+python -m evaluation.gate evaluation/results/sample_metrics.json            # compare with baseline
+python -m evaluation.gate evaluation/results/sample_metrics.json --update   # accept as new baseline
+```
