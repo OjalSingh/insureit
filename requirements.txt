@@ -1,4 +1,4 @@
-anthropic>=0.50
+anthropic>=2.4
 pillow>=10
 pytest>=8
 fastapi>=0.110

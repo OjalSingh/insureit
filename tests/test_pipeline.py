@@ -78,7 +78,8 @@ class FakeBackend:
         self.calls += 1
         if self.fail:
             raise self.fail
-        return {"claim_status": "supported", "supporting_image_ids": ["img_1"]}, 10, 5
+        return {"claim_status": "supported", "supporting_image_ids": ["img_1"]}, \
+            {"input_tokens": 10, "output_tokens": 5}
 
 
 def test_reviewer_caches_repeat_claims(tmp_path):
