@@ -3,7 +3,7 @@ import json
 
 from .schema import CLAIM_STATUS, ISSUE_TYPES, OBJECT_PARTS, RISK_FLAGS, SEVERITIES
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 SYSTEM = """You review insurance damage claims for three object types: car, laptop, package.
 Decide whether the submitted images support the user's claim, contradict it, or do not
@@ -38,9 +38,13 @@ Decision rules
   blurry, glare, part not shown, contents not shown), or the images appear to come from
   different vehicles/objects so the evidence cannot be trusted (flag wrong_object,
   claim_mismatch, manual_review_required).
-- A second image that is a wide shot, a different angle or a different-looking photo does not
-  undo a clear close-up that supports the claim. Only treat a set as mixed objects when the
-  difference is obvious (different colour, model or object) AND it matters for the claim.
+- A second image that is a wide shot, a different angle, blurry, or even looks like a different
+  car or laptop does NOT undo a clear close-up that shows the claimed damage: the claim is then
+  supported by that close-up (list only it in supporting_image_ids). Use not_enough_information
+  for mixed objects only when no single image shows the claimed damage on the claimed part.
+- A stock, watermarked or otherwise non-original image that shows damage different from the
+  claim is contradicted (with non_original_image, claim_mismatch, manual_review_required), not
+  not_enough_information.
 - evidence_standard_met is true when the image set lets you evaluate the claim against the
   minimum evidence requirements given below (even if the verdict is contradicted); false when it
   does not.
