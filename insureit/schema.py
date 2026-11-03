@@ -31,3 +31,5 @@ RISK_FLAGS = [
 ]
 
 SEVERITIES = ["none", "low", "medium", "high", "unknown"]
+
+CONFIDENCE = ["high", "medium", "low"]  # model self-report; drives the cascade, not an output column
